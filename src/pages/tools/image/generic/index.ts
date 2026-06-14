@@ -10,6 +10,7 @@ import { tool as imageToText } from './image-to-text/meta';
 import { tool as qrCodeGenerator } from './qr-code/meta';
 import { tool as rotateImage } from './rotate/meta';
 import { tool as imageEditor } from './editor/meta';
+import { tool as schoolLabels } from './school-labels/meta';
 
 export const imageGenericTools = [
   imageEditor,
@@ -23,5 +24,6 @@ export const imageGenericTools = [
   imageToText,
   qrCodeGenerator,
   rotateImage,
-  splitImage
+  splitImage,
+  schoolLabels
 ];

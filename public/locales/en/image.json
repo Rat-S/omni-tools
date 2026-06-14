@@ -174,5 +174,10 @@
         "in": "Inches (in)"
       }
     }
+  },
+  "schoolLabels": {
+    "title": "School Label Studio",
+    "shortDescription": "Generate and print custom school labels",
+    "description": "Generate and print customizable, space-efficient school label tags in A4 sheet format."
   }
 }
