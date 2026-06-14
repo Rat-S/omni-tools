@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Iraivi J - School Labels Studio</title>
+  <title>Jane Doe - School Labels Studio</title>
   <!-- Google Fonts for child-friendly premium aesthetic -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -741,7 +741,7 @@
     <div class="form-section">
       <div class="form-group">
         <label for="input-name">Child's Name</label>
-        <input type="text" id="input-name" class="form-control" value="IRAIVI J" placeholder="e.g. IRAIVI J">
+        <input type="text" id="input-name" class="form-control" value="Jane Doe" placeholder="e.g. Jane Doe">
       </div>
       
       <div class="form-row">
@@ -1132,7 +1132,7 @@
 
     // State Manager
     const state = {
-      name: "IRAIVI J",
+      name: "Jane Doe",
       classText: "Class 1 E",
       phone: "Ph: 98765 43210",
       custom: "",
@@ -1492,7 +1492,7 @@
     }
 
     // Bind Event Listeners
-    elements.nameInput.addEventListener('input', (e) => { state.name = e.target.value.trim() || 'IRAIVI J'; render(); });
+    elements.nameInput.addEventListener('input', (e) => { state.name = e.target.value.trim() || 'Jane Doe'; render(); });
     elements.classInput.addEventListener('input', (e) => { state.classText = e.target.value.trim(); render(); });
     elements.phoneInput.addEventListener('input', (e) => { state.phone = e.target.value.trim(); render(); });
     elements.customInput.addEventListener('input', (e) => { state.custom = e.target.value.trim(); render(); });
