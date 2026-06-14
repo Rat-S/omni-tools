@@ -1005,12 +1005,52 @@
   </div>
   
   <script>
-    // 2D Bin Packing Engine (Guillotine Split)
+    // 2D Bin Packing Engine (MaxRects - Best Short Side Fit)
     class BinPacker {
       constructor(width, height) {
         this.width = width;
         this.height = height;
         this.freeRects = [{ x: 0, y: 0, w: width, h: height }];
+      }
+
+      intersects(a, b) {
+        return a.x < b.x + b.w && a.x + a.w > b.x &&
+               a.y < b.y + b.h && a.y + a.h > b.y;
+      }
+
+      splitFreeRect(free, placed) {
+        const splitRects = [];
+        if (placed.x > free.x) {
+          splitRects.push({ x: free.x, y: free.y, w: placed.x - free.x, h: free.h });
+        }
+        if (placed.x + placed.w < free.x + free.w) {
+          splitRects.push({ x: placed.x + placed.w, y: free.y, w: free.x + free.w - (placed.x + placed.w), h: free.h });
+        }
+        if (placed.y > free.y) {
+          splitRects.push({ x: free.x, y: free.y, w: free.w, h: placed.y - free.y });
+        }
+        if (placed.y + placed.h < free.y + free.h) {
+          splitRects.push({ x: free.x, y: placed.y + placed.h, w: free.w, h: free.y + free.h - (placed.y + placed.h) });
+        }
+        return splitRects;
+      }
+
+      pruneFreeRects() {
+        for (let i = 0; i < this.freeRects.length; i++) {
+          for (let j = i + 1; j < this.freeRects.length; j++) {
+            const r1 = this.freeRects[i];
+            const r2 = this.freeRects[j];
+            if (r1.x >= r2.x && r1.y >= r2.y && r1.x + r1.w <= r2.x + r2.w && r1.y + r1.h <= r2.y + r2.h) {
+              this.freeRects.splice(i, 1);
+              i--;
+              break;
+            }
+            if (r2.x >= r1.x && r2.y >= r1.y && r2.x + r2.w <= r1.x + r1.w && r2.y + r2.h <= r1.y + r1.h) {
+              this.freeRects.splice(j, 1);
+              j--;
+            }
+          }
+        }
       }
 
       pack(rectangles) {
@@ -1020,26 +1060,35 @@
           let bestFit = null;
           let bestFitIndex = -1;
           let rotated = false;
-          let minAreaFit = Infinity;
+          let minShortSide = Infinity;
+          let minLongSide = Infinity;
           
           for (let i = 0; i < this.freeRects.length; i++) {
             const free = this.freeRects[i];
             
-            // Normal layout fit
+            // Check normal fit
             if (rect.w <= free.w && rect.h <= free.h) {
-              const leftoverArea = (free.w * free.h) - (rect.w * rect.h);
-              if (leftoverArea < minAreaFit) {
-                minAreaFit = leftoverArea;
+              const leftoverW = free.w - rect.w;
+              const leftoverH = free.h - rect.h;
+              const shortSide = Math.min(leftoverW, leftoverH);
+              const longSide = Math.max(leftoverW, leftoverH);
+              if (shortSide < minShortSide || (shortSide === minShortSide && longSide < minLongSide)) {
+                minShortSide = shortSide;
+                minLongSide = longSide;
                 bestFit = free;
                 bestFitIndex = i;
                 rotated = false;
               }
             }
-            // Rotated 90-degrees layout fit
+            // Check rotated 90-deg fit
             if (rect.h <= free.w && rect.w <= free.h) {
-              const leftoverArea = (free.w * free.h) - (rect.w * rect.h);
-              if (leftoverArea < minAreaFit) {
-                minAreaFit = leftoverArea;
+              const leftoverW = free.w - rect.h;
+              const leftoverH = free.h - rect.w;
+              const shortSide = Math.min(leftoverW, leftoverH);
+              const longSide = Math.max(leftoverW, leftoverH);
+              if (shortSide < minShortSide || (shortSide === minShortSide && longSide < minLongSide)) {
+                minShortSide = shortSide;
+                minLongSide = longSide;
                 bestFit = free;
                 bestFitIndex = i;
                 rotated = true;
@@ -1048,32 +1097,30 @@
           }
 
           if (bestFit) {
-            this.freeRects.splice(bestFitIndex, 1);
-            
             const w = rotated ? rect.h : rect.w;
             const h = rotated ? rect.w : rect.h;
+            const placed = { x: bestFit.x, y: bestFit.y, w: w, h: h };
             
             packed.push({
-              x: bestFit.x,
-              y: bestFit.y,
+              x: placed.x,
+              y: placed.y,
               w: w,
               h: h,
               rotated: rotated,
               item: rect
             });
             
-            const remainingW = bestFit.w - w;
-            const remainingH = bestFit.h - h;
-            
-            if (remainingW > 0 || remainingH > 0) {
-              if (remainingW > remainingH) {
-                if (remainingW > 0) this.freeRects.push({ x: bestFit.x + w, y: bestFit.y, w: remainingW, h: bestFit.h });
-                if (remainingH > 0) this.freeRects.push({ x: bestFit.x, y: bestFit.y + h, w: w, h: remainingH });
+            // Split intersecting free rectangles
+            const newFreeRects = [];
+            for (const free of this.freeRects) {
+              if (this.intersects(free, placed)) {
+                newFreeRects.push(...this.splitFreeRect(free, placed));
               } else {
-                if (remainingH > 0) this.freeRects.push({ x: bestFit.x, y: bestFit.y + h, w: bestFit.w, h: remainingH });
-                if (remainingW > 0) this.freeRects.push({ x: bestFit.x + w, y: bestFit.y, w: remainingW, h: h });
+                newFreeRects.push(free);
               }
             }
+            this.freeRects = newFreeRects;
+            this.pruneFreeRects();
           } else {
             packed.push({
               unpacked: true,
