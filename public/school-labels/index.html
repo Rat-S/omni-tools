@@ -136,6 +136,12 @@
       grid-template-columns: repeat(2, 1fr);
       gap: 8px;
     }
+
+    .layout-selector {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
     
     .theme-btn {
       padding: 10px;
@@ -399,6 +405,9 @@
       overflow: auto;
       padding: 30px;
       background-color: #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
     }
     
     /* Precise A4 Sheet mock (Scrollable preview on screen) */
@@ -548,6 +557,19 @@
       justify-content: center;
     }
     
+    .label-inner-rotated {
+      transform: rotate(90deg);
+      transform-origin: center;
+      position: absolute;
+      display: flex;
+      flex-direction: inherit;
+      padding: inherit;
+      gap: inherit;
+      align-items: inherit;
+      justify-content: inherit;
+      box-sizing: border-box;
+    }
+    
     /* Details elements */
     .label-item .name {
       font-weight: 800;
@@ -687,8 +709,12 @@
         padding: var(--page-margin-y) var(--page-margin-x) !important;
         width: 210mm !important;
         height: 297mm !important;
-        page-break-after: avoid;
+        page-break-after: always;
         page-break-before: avoid;
+      }
+      
+      .a4-sheet:last-of-type {
+        page-break-after: avoid;
       }
       
       .page-break-indicator {
@@ -759,12 +785,15 @@
       <!-- Section Alignment Selection -->
       <div class="form-group">
         <label>Grid Alignment Layout</label>
-        <div class="theme-selector">
+        <div class="layout-selector">
           <button class="theme-btn active" id="layout-rows" data-layout="rows">
-            Stacked (Rows)
+            Stacked
           </button>
           <button class="theme-btn" id="layout-cols" data-layout="cols">
-            Side-by-Side (Cols)
+            Side-by-Side
+          </button>
+          <button class="theme-btn" id="layout-opt" data-layout="opt">
+            🚀 Optimize Space
           </button>
         </div>
       </div>
@@ -976,6 +1005,87 @@
   </div>
   
   <script>
+    // 2D Bin Packing Engine (Guillotine Split)
+    class BinPacker {
+      constructor(width, height) {
+        this.width = width;
+        this.height = height;
+        this.freeRects = [{ x: 0, y: 0, w: width, h: height }];
+      }
+
+      pack(rectangles) {
+        const packed = [];
+        
+        for (const rect of rectangles) {
+          let bestFit = null;
+          let bestFitIndex = -1;
+          let rotated = false;
+          let minAreaFit = Infinity;
+          
+          for (let i = 0; i < this.freeRects.length; i++) {
+            const free = this.freeRects[i];
+            
+            // Normal layout fit
+            if (rect.w <= free.w && rect.h <= free.h) {
+              const leftoverArea = (free.w * free.h) - (rect.w * rect.h);
+              if (leftoverArea < minAreaFit) {
+                minAreaFit = leftoverArea;
+                bestFit = free;
+                bestFitIndex = i;
+                rotated = false;
+              }
+            }
+            // Rotated 90-degrees layout fit
+            if (rect.h <= free.w && rect.w <= free.h) {
+              const leftoverArea = (free.w * free.h) - (rect.w * rect.h);
+              if (leftoverArea < minAreaFit) {
+                minAreaFit = leftoverArea;
+                bestFit = free;
+                bestFitIndex = i;
+                rotated = true;
+              }
+            }
+          }
+
+          if (bestFit) {
+            this.freeRects.splice(bestFitIndex, 1);
+            
+            const w = rotated ? rect.h : rect.w;
+            const h = rotated ? rect.w : rect.h;
+            
+            packed.push({
+              x: bestFit.x,
+              y: bestFit.y,
+              w: w,
+              h: h,
+              rotated: rotated,
+              item: rect
+            });
+            
+            const remainingW = bestFit.w - w;
+            const remainingH = bestFit.h - h;
+            
+            if (remainingW > 0 || remainingH > 0) {
+              if (remainingW > remainingH) {
+                if (remainingW > 0) this.freeRects.push({ x: bestFit.x + w, y: bestFit.y, w: remainingW, h: bestFit.h });
+                if (remainingH > 0) this.freeRects.push({ x: bestFit.x, y: bestFit.y + h, w: w, h: remainingH });
+              } else {
+                if (remainingH > 0) this.freeRects.push({ x: bestFit.x, y: bestFit.y + h, w: bestFit.w, h: remainingH });
+                if (remainingW > 0) this.freeRects.push({ x: bestFit.x + w, y: bestFit.y, w: remainingW, h: h });
+              }
+            }
+          } else {
+            packed.push({
+              unpacked: true,
+              item: rect
+            });
+          }
+        }
+        
+        return packed;
+      }
+    }
+
     // State Manager
     const state = {
       name: "IRAIVI J",
@@ -1044,12 +1154,23 @@
       statusBadge: document.getElementById('status-badge'),
       btnLayoutRows: document.getElementById('layout-rows'),
       btnLayoutCols: document.getElementById('layout-cols'),
+      btnLayoutOpt: document.getElementById('layout-opt'),
       pageBreakGuide: document.getElementById('page-break-guide'),
       ruler: document.getElementById('ruler-a4')
     };
 
     // Height overflow check
     function checkOverflow() {
+      if (state.layoutMode === 'opt') {
+        const pageCount = document.querySelectorAll('.dynamic-page').length;
+        elements.pageBreakGuide.style.display = 'none';
+        elements.statusBadge.style.backgroundColor = '#f0fdf4';
+        elements.statusBadge.style.color = '#166534';
+        elements.statusBadge.style.border = '1.5px solid #dcfce7';
+        elements.statusBadge.innerHTML = `✅ Space optimized across ${pageCount} A4 sheet(s)`;
+        return;
+      }
+
       const a4HeightPx = elements.ruler.offsetHeight;
       const isOverflowing = elements.sheet.scrollHeight > a4HeightPx + 2; 
       
@@ -1070,6 +1191,9 @@
 
     // Render logic
     function render() {
+      // Clear dynamic pages from previous renders
+      document.querySelectorAll('.dynamic-page').forEach(page => page.remove());
+
       // Apply margins dynamically
       elements.sheet.style.setProperty('--page-margin-x', state.marginL + 'mm');
       elements.sheet.style.setProperty('--page-margin-y', state.marginT + 'mm');
@@ -1114,63 +1238,206 @@
 
       const emojiHtml = state.emoji ? `<span class="emoji">${state.emoji}</span>` : '';
 
-      // 1. Large Section
-      if (state.showL && state.qtyL > 0) {
-        elements.secL.style.display = 'block';
-        document.getElementById('qty-large-header').innerText = `Qty: ${state.qtyL}`;
-        for (let i = 0; i < state.qtyL; i++) {
-          const div = document.createElement('div');
-          div.className = 'label-item label-large';
-          div.innerHTML = `
-            <div class="header-row">
+      if (state.layoutMode === 'opt') {
+        elements.sheet.style.display = 'none';
+
+        // Collect all items to pack
+        const itemsToPack = [];
+        
+        if (state.showL && state.qtyL > 0) {
+          for (let i = 0; i < state.qtyL; i++) {
+            itemsToPack.push({
+              type: 'large',
+              w: state.widthL,
+              h: state.heightL,
+              html: `
+                <div class="header-row">
+                  ${state.emoji ? `<span class="emoji-pic">${state.emoji}</span>` : ''}
+                  <span class="name">${state.name}</span>
+                </div>
+                <div class="details">${state.classText}</div>
+                <div class="phone">${state.phone}</div>
+                ${state.custom ? `<div class="custom-text">${state.custom}</div>` : ''}
+              `
+            });
+          }
+        }
+        
+        if (state.showM && state.qtyM > 0) {
+          for (let i = 0; i < state.qtyM; i++) {
+            itemsToPack.push({
+              type: 'medium',
+              w: state.widthM,
+              h: state.heightM,
+              html: `
+                <div class="header-row">
+                  ${state.emoji ? `<span class="emoji-pic">${state.emoji}</span>` : ''}
+                  <span class="name">${state.name}</span>
+                </div>
+                <div class="details">${state.classText}</div>
+              `
+            });
+          }
+        }
+
+        if (state.showT && state.qtyT > 0) {
+          for (let i = 0; i < state.qtyT; i++) {
+            itemsToPack.push({
+              type: 'tiny',
+              w: state.widthT,
+              h: state.heightT,
+              html: `
+                ${state.emoji ? `<span class="emoji-pic">${state.emoji}</span>` : ''}
+                <span class="name">${state.name}</span>
+              `
+            });
+          }
+        }
+
+        // Sort items by area descending, then max dimension descending
+        itemsToPack.sort((a, b) => (b.w * b.h) - (a.w * a.h) || Math.max(b.w, b.h) - Math.max(a.w, a.h));
+
+        const usableW = 210 - (state.marginL * 2);
+        const usableH = 297 - (state.marginT * 2);
+        
+        let remainingItems = [...itemsToPack];
+        const pages = [];
+
+        while (remainingItems.length > 0) {
+          const packer = new BinPacker(usableW, usableH);
+          const packed = packer.pack(remainingItems);
+          
+          const pageItems = packed.filter(p => !p.unpacked);
+          pages.push(pageItems);
+          
+          const unpacked = packed.filter(p => p.unpacked).map(p => p.item);
+          if (pageItems.length === 0) {
+            break;
+          }
+          remainingItems = unpacked;
+        }
+
+        const previewContainer = document.querySelector('.preview-container');
+        
+        pages.forEach((pageItems, index) => {
+          const pageDiv = document.createElement('div');
+          pageDiv.className = `a4-sheet dynamic-page layout-opt ${state.showBorders ? 'show-borders' : ''}`;
+          pageDiv.style.fontFamily = state.fontFamily;
+          pageDiv.style.setProperty('--page-margin-x', state.marginL + 'mm');
+          pageDiv.style.setProperty('--page-margin-y', state.marginT + 'mm');
+          
+          const innerDiv = document.createElement('div');
+          innerDiv.className = 'optimized-inner';
+          innerDiv.style.position = 'absolute';
+          innerDiv.style.left = 'var(--page-margin-x)';
+          innerDiv.style.top = 'var(--page-margin-y)';
+          innerDiv.style.width = 'calc(100% - 2 * var(--page-margin-x))';
+          innerDiv.style.height = 'calc(100% - 2 * var(--page-margin-y))';
+          pageDiv.appendChild(innerDiv);
+          
+          pageItems.forEach(packed => {
+            const item = packed.item;
+            const rotated = packed.rotated;
+            
+            const labelDiv = document.createElement('div');
+            labelDiv.className = `label-item label-${item.type}`;
+            labelDiv.style.position = 'absolute';
+            labelDiv.style.left = `${packed.x}mm`;
+            labelDiv.style.top = `${packed.y}mm`;
+            
+            let widthCss, heightCss;
+            if (item.type === 'large') {
+              widthCss = rotated ? state.heightL : state.widthL;
+              heightCss = rotated ? state.widthL : state.heightL;
+            } else if (item.type === 'medium') {
+              widthCss = rotated ? state.heightM : state.widthM;
+              heightCss = rotated ? state.widthM : state.heightM;
+            } else {
+              widthCss = rotated ? state.heightT : state.widthT;
+              heightCss = rotated ? state.widthT : state.heightT;
+            }
+            
+            labelDiv.style.width = `${widthCss}mm`;
+            labelDiv.style.height = `${heightCss}mm`;
+            
+            if (rotated) {
+              labelDiv.style.padding = '0';
+              labelDiv.style.gap = '0';
+              labelDiv.innerHTML = `
+                <div class="label-inner-rotated" style="width: ${item.w}mm; height: ${item.h}mm; left: calc(50% - ${item.w/2}mm); top: calc(50% - ${item.h/2}mm);">
+                  ${item.html}
+                </div>
+              `;
+            } else {
+              labelDiv.innerHTML = item.html;
+            }
+            
+            innerDiv.appendChild(labelDiv);
+          });
+          
+          previewContainer.appendChild(pageDiv);
+        });
+      } else {
+        elements.sheet.style.display = 'flex';
+
+        // 1. Large Section
+        if (state.showL && state.qtyL > 0) {
+          elements.secL.style.display = 'block';
+          document.getElementById('qty-large-header').innerText = `Qty: ${state.qtyL}`;
+          for (let i = 0; i < state.qtyL; i++) {
+            const div = document.createElement('div');
+            div.className = 'label-item label-large';
+            div.innerHTML = `
+              <div class="header-row">
+                ${emojiHtml}
+                <span class="name">${state.name}</span>
+              </div>
+              <div class="details">${state.classText}</div>
+              <div class="phone">${state.phone}</div>
+              ${state.custom ? `<div class="custom-text">${state.custom}</div>` : ''}
+            `;
+            elements.gridL.appendChild(div);
+          }
+        } else {
+          elements.secL.style.display = 'none';
+        }
+
+        // 2. Medium Section
+        if (state.showM && state.qtyM > 0) {
+          elements.secM.style.display = 'block';
+          document.getElementById('qty-medium-header').innerText = `Qty: ${state.qtyM}`;
+          for (let i = 0; i < state.qtyM; i++) {
+            const div = document.createElement('div');
+            div.className = 'label-item label-medium';
+            div.innerHTML = `
+              <div class="header-row">
+                ${emojiHtml}
+                <span class="name">${state.name}</span>
+              </div>
+              <div class="details">${state.classText}</div>
+            `;
+            elements.gridM.appendChild(div);
+          }
+        } else {
+          elements.secM.style.display = 'none';
+        }
+
+        // 3. Tiny Section
+        if (state.showT && state.qtyT > 0) {
+          elements.secT.style.display = 'block';
+          document.getElementById('qty-tiny-header').innerText = `Qty: ${state.qtyT}`;
+          for (let i = 0; i < state.qtyT; i++) {
+            const div = document.createElement('div');
+            div.className = 'label-item label-tiny';
+            div.innerHTML = `
               ${emojiHtml}
               <span class="name">${state.name}</span>
-            </div>
-            <div class="details">${state.classText}</div>
-            <div class="phone">${state.phone}</div>
-            ${state.custom ? `<div class="custom-text">${state.custom}</div>` : ''}
-          `;
-          elements.gridL.appendChild(div);
+            `;
+            elements.gridT.appendChild(div);
+          }
+        } else {
+          elements.secT.style.display = 'none';
         }
-      } else {
-        elements.secL.style.display = 'none';
-      }
-
-      // 2. Medium Section
-      if (state.showM && state.qtyM > 0) {
-        elements.secM.style.display = 'block';
-        document.getElementById('qty-medium-header').innerText = `Qty: ${state.qtyM}`;
-        for (let i = 0; i < state.qtyM; i++) {
-          const div = document.createElement('div');
-          div.className = 'label-item label-medium';
-          div.innerHTML = `
-            <div class="header-row">
-              ${emojiHtml}
-              <span class="name">${state.name}</span>
-            </div>
-            <div class="details">${state.classText}</div>
-          `;
-          elements.gridM.appendChild(div);
-        }
-      } else {
-        elements.secM.style.display = 'none';
-      }
-
-      // 3. Tiny Section
-      if (state.showT && state.qtyT > 0) {
-        elements.secT.style.display = 'block';
-        document.getElementById('qty-tiny-header').innerText = `Qty: ${state.qtyT}`;
-        for (let i = 0; i < state.qtyT; i++) {
-          const div = document.createElement('div');
-          div.className = 'label-item label-tiny';
-          div.innerHTML = `
-            ${emojiHtml}
-            <span class="name">${state.name}</span>
-          `;
-          elements.gridT.appendChild(div);
-        }
-      } else {
-        elements.secT.style.display = 'none';
       }
 
       // Typography and Borders
@@ -1220,10 +1487,10 @@
     // Themes selection
     document.querySelectorAll('.theme-btn').forEach(btn => {
       // Filter layout buttons out of general theme handlers
-      if (btn.id === 'layout-rows' || btn.id === 'layout-cols') return;
+      if (btn.id === 'layout-rows' || btn.id === 'layout-cols' || btn.id === 'layout-opt') return;
       btn.addEventListener('click', () => {
         document.querySelectorAll('.theme-btn').forEach(b => {
-          if (b.id !== 'layout-rows' && b.id !== 'layout-cols') b.classList.remove('active');
+          if (b.id !== 'layout-rows' && b.id !== 'layout-cols' && b.id !== 'layout-opt') b.classList.remove('active');
         });
         btn.classList.add('active');
         state.theme = btn.dataset.theme;
@@ -1235,6 +1502,7 @@
     elements.btnLayoutRows.addEventListener('click', () => {
       elements.btnLayoutRows.classList.add('active');
       elements.btnLayoutCols.classList.remove('active');
+      elements.btnLayoutOpt.classList.remove('active');
       state.layoutMode = 'rows';
       
       // Auto-set full width columns
@@ -1253,6 +1521,7 @@
     elements.btnLayoutCols.addEventListener('click', () => {
       elements.btnLayoutCols.classList.add('active');
       elements.btnLayoutRows.classList.remove('active');
+      elements.btnLayoutOpt.classList.remove('active');
       state.layoutMode = 'cols';
       
       // Auto-set space saving columns
@@ -1264,6 +1533,15 @@
       elements.colsLSelect.value = "1";
       elements.colsMSelect.value = "1";
       elements.colsTSelect.value = "2";
+      
+      render();
+    });
+
+    elements.btnLayoutOpt.addEventListener('click', () => {
+      elements.btnLayoutOpt.classList.add('active');
+      elements.btnLayoutRows.classList.remove('active');
+      elements.btnLayoutCols.classList.remove('active');
+      state.layoutMode = 'opt';
       
       render();
     });
