@@ -1060,38 +1060,35 @@
           let bestFit = null;
           let bestFitIndex = -1;
           let rotated = false;
-          let minShortSide = Infinity;
-          let minLongSide = Infinity;
+          let minY = Infinity;
+          let minX = Infinity;
           
+          // Step 1: Scan for placements WITHOUT rotation to prioritize standard horizontal layout
           for (let i = 0; i < this.freeRects.length; i++) {
             const free = this.freeRects[i];
-            
-            // Check normal fit
             if (rect.w <= free.w && rect.h <= free.h) {
-              const leftoverW = free.w - rect.w;
-              const leftoverH = free.h - rect.h;
-              const shortSide = Math.min(leftoverW, leftoverH);
-              const longSide = Math.max(leftoverW, leftoverH);
-              if (shortSide < minShortSide || (shortSide === minShortSide && longSide < minLongSide)) {
-                minShortSide = shortSide;
-                minLongSide = longSide;
+              if (free.y < minY || (free.y === minY && free.x < minX)) {
+                minY = free.y;
+                minX = free.x;
                 bestFit = free;
                 bestFitIndex = i;
                 rotated = false;
               }
             }
-            // Check rotated 90-deg fit
-            if (rect.h <= free.w && rect.w <= free.h) {
-              const leftoverW = free.w - rect.h;
-              const leftoverH = free.h - rect.w;
-              const shortSide = Math.min(leftoverW, leftoverH);
-              const longSide = Math.max(leftoverW, leftoverH);
-              if (shortSide < minShortSide || (shortSide === minShortSide && longSide < minLongSide)) {
-                minShortSide = shortSide;
-                minLongSide = longSide;
-                bestFit = free;
-                bestFitIndex = i;
-                rotated = true;
+          }
+          
+          // Step 2: Scan for placements WITH rotation ONLY if no standard horizontal placement is possible
+          if (!bestFit) {
+            for (let i = 0; i < this.freeRects.length; i++) {
+              const free = this.freeRects[i];
+              if (rect.h <= free.w && rect.w <= free.h) {
+                if (free.y < minY || (free.y === minY && free.x < minX)) {
+                  minY = free.y;
+                  minX = free.x;
+                  bestFit = free;
+                  bestFitIndex = i;
+                  rotated = true;
+                }
               }
             }
           }
@@ -1099,7 +1096,7 @@
           if (bestFit) {
             const w = rotated ? rect.h : rect.w;
             const h = rotated ? rect.w : rect.h;
-            const placed = { x: bestFit.x, y: bestFit.y, w: w, h: h };
+            const placed = { x: minX, y: minY, w: w, h: h };
             
             packed.push({
               x: placed.x,
